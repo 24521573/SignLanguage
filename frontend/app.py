@@ -1184,10 +1184,12 @@ def build_app() -> gr.Blocks:
 
         with gr.Row(equal_height=True):
             with gr.Column(scale=1):
-                video_input = gr.File(
-                    label="Input video (.mp4)",
-                    file_types=[".mp4"],
-                    type="filepath",
+                video_input = gr.Video(
+                    label="Upload video (.mp4) / visual result",
+                    sources=["upload"],
+                    format="mp4",
+                    interactive=True,
+                    height=520,
                 )
                 with gr.Row():
                     predict_button = gr.Button("Predict", variant="primary", size="lg")
@@ -1196,22 +1198,16 @@ def build_app() -> gr.Blocks:
             with gr.Column(scale=1):
                 prediction_output = gr.HTML(empty_prediction())
 
-        visual_output = gr.Video(
-            label="Video visual + bounding boxes",
-            interactive=False,
-            height=520,
-        )
-
         predict_button.click(
             fn=run_demo,
             inputs=[video_input],
-            outputs=[visual_output, prediction_output],
+            outputs=[video_input, prediction_output],
             show_progress="full",
         )
         clear_button.click(
             fn=clear_demo,
             inputs=[],
-            outputs=[visual_output, prediction_output],
+            outputs=[video_input, prediction_output],
             queue=False,
         )
 

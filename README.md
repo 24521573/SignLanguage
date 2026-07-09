@@ -13,8 +13,8 @@ The bounding boxes are used for visualization only. The prediction model uses th
 
 The Gradio interface provides:
 
-- An `.mp4` video upload input.
-- A visualized video output with MediaPipe landmark overlays.
+- A single `.mp4` video panel for upload and visualized output.
+- MediaPipe landmark overlays on the processed video.
 - A prediction card showing the Vietnamese label and confidence score.
 
 Main demo file:
@@ -88,12 +88,12 @@ The minimum required files are:
 
 ```txt
 models/VideoMAE_base_kinetics/artifacts/stage5_videomae_fullframe/
-├── checkpoints/
-│   └── best_hf_model/
-│       ├── config.json
-│       └── model.safetensors
-└── configs/
-    └── id_to_class.json
+|-- checkpoints/
+|   `-- best_hf_model/
+|       |-- config.json
+|       `-- model.safetensors
+`-- configs/
+    `-- id_to_class.json
 ```
 
 If these files are missing, the UI can still launch, but prediction will not work.
@@ -102,29 +102,29 @@ MediaPipe landmark models for visualization are included in the repository:
 
 ```txt
 models/mediapipe_tasks/
-├── face_landmarker.task
-├── hand_landmarker.task
-└── pose_landmarker_lite.task
+|-- face_landmarker.task
+|-- hand_landmarker.task
+`-- pose_landmarker_lite.task
 ```
 
 ## Project structure
 
 ```txt
 SignLanguage/
-├── frontend/
-│   └── app.py
-├── models/
-│   ├── VideoMAE_base_kinetics/
-│   │   └── train.py
-│   ├── VideoMAE_large_kinetics/
-│   │   └── train.py
-│   └── mediapipe_tasks/
-│       ├── face_landmarker.task
-│       ├── hand_landmarker.task
-│       └── pose_landmarker_lite.task
-├── run_demo.bat
-├── .gitignore
-└── README.md
+|-- frontend/
+|   `-- app.py
+|-- models/
+|   |-- VideoMAE_base_kinetics/
+|   |   `-- train.py
+|   |-- VideoMAE_large_kinetics/
+|   |   `-- train.py
+|   `-- mediapipe_tasks/
+|       |-- face_landmarker.task
+|       |-- hand_landmarker.task
+|       `-- pose_landmarker_lite.task
+|-- run_demo.bat
+|-- .gitignore
+`-- README.md
 ```
 
 The following folders are intentionally ignored and should not be pushed directly:
