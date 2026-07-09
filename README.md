@@ -13,9 +13,12 @@ The bounding boxes are used for visualization only. The prediction model uses th
 
 The Gradio interface provides:
 
-- A single `.mp4` video panel for upload and visualized output.
-- MediaPipe landmark overlays on the processed video.
+- An `.mp4` file upload input.
+- An animated visual preview with MediaPipe landmark/bounding-box overlays.
 - A prediction card showing the Vietnamese label and confidence score.
+
+The visual preview is rendered as an animated GIF to avoid browser MP4 codec
+playback issues during local demos.
 
 Main demo file:
 
@@ -71,7 +74,7 @@ Windows CMD:
 Install the required packages:
 
 ```bash
-pip install gradio opencv-python imageio-ffmpeg numpy torch transformers mediapipe
+pip install gradio opencv-python imageio-ffmpeg numpy pillow torch transformers mediapipe
 ```
 
 ## Model artifacts
@@ -157,4 +160,3 @@ The current demo uses the Base VideoMAE artifact for a simpler and more stable l
 mean = [0.485, 0.456, 0.406]
 std  = [0.229, 0.224, 0.225]
 ```
-

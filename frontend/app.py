@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import threading
@@ -12,6 +13,7 @@ import gradio as gr
 import imageio_ffmpeg
 import numpy as np
 import torch
+from PIL import Image
 from transformers import VideoMAEForVideoClassification
 
 
@@ -157,6 +159,61 @@ def create_bbox_visualization(video_path: str | Path) -> str:
     return str(output_path)
 
 
+def create_browser_preview(video_path: str | Path) -> str:
+    frames_rgb, fps = read_video_frames(video_path)
+    frames_bgr = [
+        cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
+        for frame_rgb in frames_rgb
+    ]
+    output_path = OUTPUT_DIR / f"sign_language_input_{uuid.uuid4().hex[:10]}.mp4"
+    write_browser_mp4(frames_bgr, fps=fps, output_path=output_path)
+    return str(output_path)
+
+
+def create_gif_preview(video_path: str | Path) -> str:
+    frames_rgb, fps = read_video_frames(video_path)
+    if not frames_rgb:
+        raise ValueError("Video không có frame hợp lệ.")
+
+    frames_rgb = trim_leading_static_frames(frames_rgb)
+    max_frames = 72
+    if len(frames_rgb) > max_frames:
+        indices = np.linspace(0, len(frames_rgb) - 1, max_frames, dtype=np.int64)
+        frames_rgb = [frames_rgb[int(index)] for index in indices]
+
+    try:
+        if mediapipe_task_models_ready():
+            frames_bgr = draw_mediapipe_task_boxes(frames_rgb, fps)
+        else:
+            frames_bgr = draw_fallback_boxes(frames_rgb)
+    except Exception as error:
+        LOGGER.exception("BBox GIF visualization failed: %s", error)
+        frames_bgr = draw_fallback_boxes(frames_rgb)
+
+    pil_frames: list[Image.Image] = []
+    for frame_bgr in frames_bgr:
+        frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+        height, width = frame_rgb.shape[:2]
+        max_width = 760
+        if width > max_width:
+            scale = max_width / float(width)
+            new_size = (max_width, max(1, int(height * scale)))
+            frame_rgb = cv2.resize(frame_rgb, new_size, interpolation=cv2.INTER_AREA)
+        pil_frames.append(Image.fromarray(frame_rgb))
+
+    output_path = OUTPUT_DIR / f"sign_language_preview_{uuid.uuid4().hex[:10]}.gif"
+    duration_ms = int(np.clip(1000.0 / max(float(fps), 1.0), 40, 120))
+    pil_frames[0].save(
+        output_path,
+        save_all=True,
+        append_images=pil_frames[1:],
+        duration=duration_ms,
+        loop=0,
+        optimize=True,
+    )
+    return str(output_path)
+
+
 def mediapipe_task_models_ready() -> bool:
     return HAND_TASK_PATH.exists() and POSE_TASK_PATH.exists() and FACE_TASK_PATH.exists()
 
@@ -245,8 +302,7 @@ def draw_mediapipe_task_boxes(frames_rgb: list[np.ndarray], fps: float) -> list[
                 draw_box(frame_bgr, face_box, "face", (80, 220, 255))
 
             for label, box in task_hand_boxes(hand_result, w, h).items():
-                color = (255, 120, 80) if label == "left hand" else (80, 180, 255)
-                draw_box(frame_bgr, box, label, color)
+                draw_box(frame_bgr, box, label, hand_color(label))
 
             output.append(frame_bgr)
 
@@ -259,31 +315,67 @@ def task_hand_boxes(hand_result: Any, width: int, height: int) -> dict[str, tupl
     if not landmarks_list:
         return {}
 
-    detected: list[tuple[str, tuple[int, int, int, int]]] = []
+    detected: list[tuple[str | None, float, tuple[int, int, int, int]]] = []
     for index, landmarks in enumerate(landmarks_list):
         box = task_landmarks_box(landmarks, width, height, padding=0.16)
         if box is None:
             continue
 
-        label = ""
+        label: str | None = None
+        score = 0.0
         if index < len(handedness_list) and handedness_list[index]:
             category = handedness_list[index][0]
-            label = str(getattr(category, "category_name", "")).strip().lower()
-        if label not in {"left", "right"}:
-            label = "left" if box_center(box)[0] < width / 2.0 else "right"
-        detected.append((label, box))
+            category_name = str(getattr(category, "category_name", "")).strip().lower()
+            score = float(getattr(category, "score", 0.0) or 0.0)
+            if category_name in {"left", "right"} and score >= 0.50:
+                label = category_name
+        detected.append((label, score, box))
 
     if not detected:
         return {}
-    if len(detected) == 1:
-        label, box = detected[0]
-        return {f"{label} hand": box}
 
-    detected = sorted(detected[:2], key=lambda item: box_center(item[1])[0])
+    if len(detected) == 1:
+        label, _score, box = detected[0]
+        return {f"{label} hand" if label else "hand": box}
+
+    confident: dict[str, tuple[int, int, int, int]] = {}
+    unknown_boxes: list[tuple[int, int, int, int]] = []
+    for label, _score, box in detected[:2]:
+        if label in {"left", "right"} and f"{label} hand" not in confident:
+            confident[f"{label} hand"] = box
+        else:
+            unknown_boxes.append(box)
+
+    if confident:
+        for box in unknown_boxes:
+            confident[next_hand_label(confident)] = box
+        return confident
+
+    sorted_boxes = sorted(
+        (box for _label, _score, box in detected[:2]),
+        key=lambda item: box_center(item)[0],
+    )
     return {
-        "left hand": detected[0][1],
-        "right hand": detected[1][1],
+        "left side hand": sorted_boxes[0],
+        "right side hand": sorted_boxes[1],
     }
+
+
+def next_hand_label(existing: dict[str, tuple[int, int, int, int]]) -> str:
+    if "hand" not in existing:
+        return "hand"
+    index = 2
+    while f"hand {index}" in existing:
+        index += 1
+    return f"hand {index}"
+
+
+def hand_color(label: str) -> tuple[int, int, int]:
+    if label == "left hand":
+        return (255, 120, 80)
+    if label == "right hand":
+        return (80, 180, 255)
+    return (210, 130, 255)
 
 
 def task_landmarks_box(
@@ -345,10 +437,8 @@ def draw_fallback_boxes(frames_rgb: list[np.ndarray]) -> list[np.ndarray]:
             draw_box(frame_bgr, body_box, "body", (80, 220, 120))
         if face_box is not None:
             draw_box(frame_bgr, face_box, "face", (80, 220, 255))
-        if "left hand" in hand_boxes:
-            draw_box(frame_bgr, hand_boxes["left hand"], "left hand", (255, 120, 80))
-        if "right hand" in hand_boxes:
-            draw_box(frame_bgr, hand_boxes["right hand"], "right hand", (80, 180, 255))
+        for label, box in hand_boxes.items():
+            draw_box(frame_bgr, box, label, hand_color(label))
 
         output.append(frame_bgr)
 
@@ -530,20 +620,21 @@ def detect_hand_boxes(
     if near_face_box is not None:
         candidates.append((h * w * 0.95, near_face_box))
 
-    detected = select_distinct_hand_candidates(candidates, w, h)
-    selected = complete_hand_boxes(detected, face_box, body_box, w, h)
+    selected = select_distinct_hand_candidates(candidates, w, h)
     selected = [
         refine_hand_box(box, skin, face_box, body_box, w, h)
-        for box in selected
+        for box in selected[:2]
     ]
     selected = sorted(selected[:2], key=lambda box: box_center(box)[0])
 
-    if len(selected) < 2:
+    if not selected:
         return {}
+    if len(selected) == 1:
+        return {"hand": selected[0]}
 
     return {
-        "left hand": selected[0],
-        "right hand": selected[1],
+        "left side hand": selected[0],
+        "right side hand": selected[1],
     }
 
 
@@ -1134,34 +1225,72 @@ def extract_video_path(value: Any) -> Path:
     return path
 
 
-def run_demo(video_file: Any) -> tuple[str | None, str]:
+def empty_video_html() -> str:
+    return (
+        "<div class='video-placeholder'>"
+        "<div>Upload a .mp4 video to preview it here</div>"
+        "</div>"
+    )
+
+
+def gif_preview_html(gif_path: str | Path) -> str:
+    path = Path(gif_path)
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    return (
+        "<div class='video-panel'>"
+        f"<img class='preview-video' src='data:image/gif;base64,{encoded}' "
+        "alt='Uploaded sign language preview'>"
+        "</div>"
+    )
+
+
+def prediction_card(label: str, confidence: float) -> str:
+    return (
+        f"<div class='prediction-card'>"
+        f"<div class='prediction-title'>Predict label</div>"
+        f"<div class='prediction-label'>{label}</div>"
+        f"<div class='prediction-confidence'>{confidence:.2f}%</div>"
+        f"</div>"
+    )
+
+
+def error_prediction(message: str) -> str:
+    return (
+        "<div class='prediction-card prediction-error'>"
+        "<div class='prediction-title'>Predict label</div>"
+        "<div class='prediction-label'>Chưa dự đoán được</div>"
+        f"<div class='prediction-confidence'>{message}</div>"
+        "</div>"
+    )
+
+
+def prepare_upload(video_file: Any) -> tuple[str | None, str, str | None]:
     try:
         video_path = extract_video_path(video_file)
-        visual_path = create_bbox_visualization(video_path)
-        label, confidence = PREDICTOR.predict(video_path)
-        prediction = (
-            f"<div class='prediction-card'>"
-            f"<div class='prediction-title'>Predict label</div>"
-            f"<div class='prediction-label'>{label}</div>"
-            f"<div class='prediction-confidence'>{confidence:.2f}%</div>"
-            f"</div>"
-        )
-        return visual_path, prediction
+        preview_path = create_gif_preview(video_path)
+        return gif_preview_html(preview_path), empty_prediction(), str(video_path)
     except Exception as error:
-        LOGGER.exception("Demo failed")
-        message = str(error)
-        prediction = (
-            "<div class='prediction-card prediction-error'>"
-            "<div class='prediction-title'>Predict label</div>"
-            "<div class='prediction-label'>Chưa dự đoán được</div>"
-            f"<div class='prediction-confidence'>{message}</div>"
-            "</div>"
-        )
-        return None, prediction
+        LOGGER.exception("Upload preview failed")
+        return empty_video_html(), error_prediction(str(error)), None
 
 
-def clear_demo() -> tuple[None, str]:
-    return None, empty_prediction()
+def run_demo(video_file: Any) -> str:
+    try:
+        video_path = extract_video_path(video_file)
+    except Exception as error:
+        LOGGER.exception("Invalid video input")
+        return error_prediction(str(error))
+
+    try:
+        label, confidence = PREDICTOR.predict(video_path)
+        return prediction_card(label, confidence)
+    except Exception as error:
+        LOGGER.exception("Prediction failed")
+        return error_prediction(str(error))
+
+
+def clear_demo() -> tuple[str, str, None, None]:
+    return empty_video_html(), empty_prediction(), None, None
 
 
 def empty_prediction() -> str:
@@ -1184,13 +1313,15 @@ def build_app() -> gr.Blocks:
 
         with gr.Row(equal_height=True):
             with gr.Column(scale=1):
-                video_input = gr.Video(
-                    label="Upload video (.mp4) / visual result",
-                    sources=["upload"],
-                    format="mp4",
-                    interactive=True,
-                    height=520,
-                )
+                uploaded_video_path = gr.State(value=None)
+                video_output = gr.HTML(empty_video_html())
+                with gr.Row():
+                    video_file = gr.File(
+                        label="Upload .mp4",
+                        file_types=[".mp4"],
+                        type="filepath",
+                        height=90,
+                    )
                 with gr.Row():
                     predict_button = gr.Button("Predict", variant="primary", size="lg")
                     clear_button = gr.Button("Clear", size="lg")
@@ -1198,16 +1329,22 @@ def build_app() -> gr.Blocks:
             with gr.Column(scale=1):
                 prediction_output = gr.HTML(empty_prediction())
 
+        video_file.upload(
+            fn=prepare_upload,
+            inputs=[video_file],
+            outputs=[video_output, prediction_output, uploaded_video_path],
+            show_progress="minimal",
+        )
         predict_button.click(
             fn=run_demo,
-            inputs=[video_input],
-            outputs=[video_input, prediction_output],
+            inputs=[uploaded_video_path],
+            outputs=[prediction_output],
             show_progress="full",
         )
         clear_button.click(
             fn=clear_demo,
             inputs=[],
-            outputs=[video_input, prediction_output],
+            outputs=[video_output, prediction_output, uploaded_video_path, video_file],
             queue=False,
         )
 
@@ -1227,6 +1364,29 @@ def demo_css() -> str:
       line-height: 1.05;
       letter-spacing: -.045em;
       font-weight: 850;
+    }
+    .video-panel, .video-placeholder {
+      width: 100%;
+      min-height: 520px;
+      border: 1px solid var(--border-color-primary);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--background-fill-secondary);
+    }
+    .video-placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--body-text-color-subdued);
+      font-size: 18px;
+      font-weight: 650;
+    }
+    .preview-video {
+      display: block;
+      width: 100%;
+      height: 520px;
+      object-fit: contain;
+      background: #000;
     }
     .prediction-card {
       min-height: 210px;
