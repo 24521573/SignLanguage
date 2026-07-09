@@ -1,0 +1,43 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Notebook/cache files
+.ipynb_checkpoints/
+
+# Runtime outputs
+outputs/
+*.log
+*.pid
+
+# Local assistant/tooling state
+.agents/
+.codex/
+
+# Dataset: keep out of normal Git history
+data/
+
+# Large training artifacts/checkpoints
+models/**/artifacts/
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+*.bin
+*.onnx
+*.npy
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
