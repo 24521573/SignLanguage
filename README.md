@@ -11,6 +11,8 @@ The bounding boxes are used for visualization only. The prediction model uses th
 
 ## Demo UI
 
+https://github.com/user-attachments/assets/dae50210-1e01-4934-97b8-f834530c752e
+
 The Gradio interface provides:
 
 - An `.mp4` file upload input.
