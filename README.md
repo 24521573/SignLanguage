@@ -25,7 +25,7 @@ playback issues during local demos.
 Main demo file:
 
 ```txt
-frontend/app.py
+demo/app.py
 ```
 
 Run on Windows:
@@ -37,7 +37,7 @@ run_demo.bat
 Or run directly with Python:
 
 ```bash
-python frontend/app.py
+python demo/app.py
 ```
 
 Then open:
@@ -91,45 +91,36 @@ models/VideoMAE_base_kinetics/artifacts/stage5_videomae_fullframe/
 
 The minimum required files are:
 
-```txt
-models/VideoMAE_base_kinetics/artifacts/stage5_videomae_fullframe/
-|-- checkpoints/
-|   `-- best_hf_model/
-|       |-- config.json
-|       `-- model.safetensors
-`-- configs/
-    `-- id_to_class.json
-```
+- `models/VideoMAE_base_kinetics/artifacts/stage5_videomae_fullframe/checkpoints/best_hf_model/config.json`
+- `models/VideoMAE_base_kinetics/artifacts/stage5_videomae_fullframe/checkpoints/best_hf_model/model.safetensors`
+- `models/VideoMAE_base_kinetics/artifacts/stage5_videomae_fullframe/configs/id_to_class.json`
 
 If these files are missing, the UI can still launch, but prediction will not work.
 
 MediaPipe landmark models for visualization are included in the repository:
 
-```txt
-models/mediapipe_tasks/
-|-- face_landmarker.task
-|-- hand_landmarker.task
-`-- pose_landmarker_lite.task
-```
+- `models/mediapipe_tasks/face_landmarker.task`
+- `models/mediapipe_tasks/hand_landmarker.task`
+- `models/mediapipe_tasks/pose_landmarker_lite.task`
 
 ## Project structure
 
-```txt
+```text
 SignLanguage/
-|-- frontend/
-|   `-- app.py
-|-- models/
-|   |-- VideoMAE_base_kinetics/
-|   |   `-- train.py
-|   |-- VideoMAE_large_kinetics/
-|   |   `-- train.py
-|   `-- mediapipe_tasks/
-|       |-- face_landmarker.task
-|       |-- hand_landmarker.task
-|       `-- pose_landmarker_lite.task
-|-- run_demo.bat
-|-- .gitignore
-`-- README.md
+├── demo/
+│   └── app.py
+├── models/
+│   ├── VideoMAE_base_kinetics/
+│   │   └── train.py
+│   ├── VideoMAE_large_kinetics/
+│   │   └── train.py
+│   └── mediapipe_tasks/
+│       ├── face_landmarker.task
+│       ├── hand_landmarker.task
+│       └── pose_landmarker_lite.task
+├── run_demo.bat
+├── .gitignore
+└── README.md
 ```
 
 The following folders are intentionally ignored and should not be pushed directly:
