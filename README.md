@@ -13,14 +13,18 @@ The bounding boxes are used for visualization only. The prediction model uses th
 
 https://github.com/user-attachments/assets/dae50210-1e01-4934-97b8-f834530c752e
 
-The Gradio interface provides:
+The demo shows the complete recognition workflow:
 
-- An `.mp4` file upload input.
-- An animated visual preview with MediaPipe landmark/bounding-box overlays.
-- A prediction card showing the Vietnamese label and confidence score.
+- Upload an `.mp4` sign language video.
+- Preview the uploaded video.
+- Visualize MediaPipe landmarks and bounding boxes for the face, body, left hand, and right hand.
+- Run inference with the fine-tuned VideoMAE model.
+- Display the predicted Vietnamese sign label and confidence score.
 
-The visual preview is rendered as an animated GIF to avoid browser MP4 codec
-playback issues during local demos.
+The bounding boxes and landmarks are used for visualization only.  
+VideoMAE performs prediction directly from the sampled full-frame video.
+
+The processed visual preview is rendered as an animated GIF to avoid browser MP4 codec playback issues during local demos.
 
 Main demo file:
 
