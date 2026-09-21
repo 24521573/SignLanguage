@@ -5,6 +5,7 @@ import json
 import logging
 import threading
 import uuid
+from html_rendering import escape_html
 from pathlib import Path
 from typing import Any
 
@@ -1248,7 +1249,7 @@ def prediction_card(label: str, confidence: float) -> str:
     return (
         f"<div class='prediction-card'>"
         f"<div class='prediction-title'>Predict label</div>"
-        f"<div class='prediction-label'>{label}</div>"
+        f"<div class='prediction-label'>{escape_html(label)}</div>"
         f"<div class='prediction-confidence'>{confidence:.2f}%</div>"
         f"</div>"
     )
@@ -1259,7 +1260,7 @@ def error_prediction(message: str) -> str:
         "<div class='prediction-card prediction-error'>"
         "<div class='prediction-title'>Predict label</div>"
         "<div class='prediction-label'>Chưa dự đoán được</div>"
-        f"<div class='prediction-confidence'>{message}</div>"
+        f"<div class='prediction-confidence'>{escape_html(message)}</div>"
         "</div>"
     )
 
